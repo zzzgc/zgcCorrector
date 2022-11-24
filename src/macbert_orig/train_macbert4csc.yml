@@ -1,0 +1,28 @@
+MODEL:
+  BERT_CKPT: "hfl/chinese-macbert-base"
+  DEVICE: "cuda"
+  NAME: "macbert4csc"
+  GPU_IDS: [0]
+  # [loss_coefficient]
+  HYPER_PARAMS: [0.4]
+
+  STEP: [0.125]
+  #WEIGHTS: "output/macbert4csc/epoch=6-val_loss=0.07.ckpt"
+  WEIGHTS: ""
+
+DATASETS:
+  TRAIN: "/var/zgcCorrector/data/data/sighan_27w.txt"
+  TRAIN13_14_15: "/var/zgcCorrector/data/data/13_14_15.txt"
+  VALID13: "/var/zgcCorrector/data/data/test13.txt"
+  VALID14: "/var/zgcCorrector/data/data/test14.txt"
+  VALID15: "/var/zgcCorrector/data/data/test15.txt"
+
+SOLVER:
+  BASE_LR: 5e-5
+  WEIGHT_DECAY: 0.01
+  BATCH_SIZE: 32
+  MAX_EPOCHS: 50
+  ACCUMULATE_GRAD_BATCHES: 2
+
+OUTPUT_DIR: "output/pt2"
+MODE: ["train", "test"]
