@@ -1,9 +1,3 @@
-"""
-@Time   :   2021-01-21 10:52:47
-@File   :   lr_scheduler.py
-@Author :   Abtion
-@Email  :   abtion{at}outlook.com
-"""
 import math
 import warnings
 from bisect import bisect_right
