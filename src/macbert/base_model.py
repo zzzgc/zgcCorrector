@@ -191,13 +191,67 @@ class CscTrainingModel(BaseTrainingEngine, ABC):
         return rst
 
 
-class DemoModel(CscTrainingModel, ABC):
+class SemanticModel(nn.Module):
+    def __init__(self, SemanticModelPath):
+        super(SemanticModel, self).__init__()
+        self.bert = AutoModel.from_pretrained(SemanticModel)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, **kwarg):
+        output = self.bert(input_ids, token_type_ids, attention_mask)
+        output = output.last_hidden_state
+        # output:[batch, seq_len, hid]
+        return output
+
+class SpeechModel(nn.Module):
+    def __init__(self, SpeechModelPath):
+        super(SpeechModel, self).__init__()
+        self.bert = AutoModel.from_pretrained(SpeechModelPath)
+        
+        # 这里有23个声母和24个韵母，以及5个声调
+        self.initialEmbeddings = nn.Embedding(23+2, self.bert.config.hidden_size)
+        self.finalEmbeddings = nn.Embedding(24+1, self.bert.config.hidden_size)
+        self.tuneEmbeddings = nn.Embedding(5+1, self.bert.config.hidden_size)
+    
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, initial_ids=None, final_ids=None, tune_ids=None,  **kwarg):
+        embeddings = self.bert.embeddings(input_ids, token_type_ids, attention_mask)
+        embeddings = embeddings + self.initialEmbeddings(initial_ids) + self.finalEmbeddings(final_ids) + self.tuneEmbeddings(tune_ids)
+        output = self.bert.encoder(embeddings)
+        output = output.last_hidden_state
+        # output:[batch, seq_len, hid]
+        return output
+
+class GlyphModel(nn.Module):
+    def __init__(self, GlyphModelPath):
+        super(GlyphModel, self).__init__()
+        
+        bert = AutoModel.from_pretrained(GlyphModelPath)
+        self.bert_embedding = bert.embeddings
+        self.encoder = bert.encoder
+        e = torch.load('')
+        self.glyph_embedding = nn.Embedding(21128,768).from_pretrained(e)
+        
+        # 这里有23个声母和24个韵母，以及5个声调
+    
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None,  **kwarg):
+        embeddings = self.bert_embedding(input_ids, token_type_ids, attention_mask)
+        embeddings = embeddings + self.glyph_embedding(input_ids)
+        output = self.encoder(embeddings)
+        output = output.last_hidden_state
+        # output:[batch, seq_len, hid]
+        return output
+
+class ShareWeight4MultiModel(nn.Module):
+    def __init__(self, GlyphModelPath):
+        super(ShareWeight4MultiModel, self).__init__()
+        pass
+class Model(CscTrainingModel, ABC):
     def __init__(self, cfg, tokenizer, sighan13, sighan14, sighan15):
         super().__init__(cfg)
         self.cfg = cfg
         self.sighan13 = sighan13
         self.sighan14 = sighan14
         self.sighan15 = sighan15
+        
         self.bert = AutoModel.from_pretrained(cfg.MODEL.BERT_CKPT)
         self.correction = nn.Linear(self.bert.config.hidden_size, 21128)
         self.detection = nn.Linear(self.bert.config.hidden_size, 1)
