@@ -240,18 +240,28 @@ class GlyphModel(nn.Module):
         # output:[batch, seq_len, hid]
         return output
 
-class ShareWeight4MultiModel(nn.Module):
-    def __init__(self, GlyphModelPath):
-        super(ShareWeight4MultiModel, self).__init__()
-        pass
 class Model(CscTrainingModel, ABC):
-    def __init__(self, cfg, tokenizer, sighan13, sighan14, sighan15):
+    def __init__(
+        self, 
+        cfg, 
+        tokenizer,
+        sighan13,
+        sighan14,
+        sighan15,
+        SemanticModelPath,
+        SpeechModelPath,
+        GlyphModelPath,
+        if_pretrain=False,
+        if_share=False
+        ):
         super().__init__(cfg)
         self.cfg = cfg
         self.sighan13 = sighan13
         self.sighan14 = sighan14
         self.sighan15 = sighan15
         
+        if if_share:
+            
         self.bert = AutoModel.from_pretrained(cfg.MODEL.BERT_CKPT)
         self.correction = nn.Linear(self.bert.config.hidden_size, 21128)
         self.detection = nn.Linear(self.bert.config.hidden_size, 1)
