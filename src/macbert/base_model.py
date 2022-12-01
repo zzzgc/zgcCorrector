@@ -11,7 +11,8 @@ import pytorch_lightning as pl
 # from pycorrector.macbert import lr_scheduler
 import lr_scheduler
 from evaluate_util import compute_corrector_prf, compute_sentence_level_prf
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, ElectraForPreTraining
+from transformer import TransformerBlock  
 
 class FocalLoss(nn.Module):
     """
@@ -192,20 +193,20 @@ class CscTrainingModel(BaseTrainingEngine, ABC):
 
 
 class SemanticModel(nn.Module):
-    def __init__(self, SemanticModelPath):
+    def __init__(self, bert):
         super(SemanticModel, self).__init__()
-        self.bert = AutoModel.from_pretrained(SemanticModel)
+        self.bert = bert
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, **kwarg):
         output = self.bert(input_ids, token_type_ids, attention_mask)
-        output = output.last_hidden_state
+        # output = output.last_hidden_state
         # output:[batch, seq_len, hid]
         return output
 
 class SpeechModel(nn.Module):
-    def __init__(self, SpeechModelPath):
+    def __init__(self, bert):
         super(SpeechModel, self).__init__()
-        self.bert = AutoModel.from_pretrained(SpeechModelPath)
+        self.bert = bert
         
         # 这里有23个声母和24个韵母，以及5个声调
         self.initialEmbeddings = nn.Embedding(23+2, self.bert.config.hidden_size)
@@ -216,15 +217,15 @@ class SpeechModel(nn.Module):
         embeddings = self.bert.embeddings(input_ids, token_type_ids, attention_mask)
         embeddings = embeddings + self.initialEmbeddings(initial_ids) + self.finalEmbeddings(final_ids) + self.tuneEmbeddings(tune_ids)
         output = self.bert.encoder(embeddings)
-        output = output.last_hidden_state
+        # output = output.last_hidden_state
         # output:[batch, seq_len, hid]
         return output
 
 class GlyphModel(nn.Module):
-    def __init__(self, GlyphModelPath):
+    def __init__(self, bert):
         super(GlyphModel, self).__init__()
+        bert = bert
         
-        bert = AutoModel.from_pretrained(GlyphModelPath)
         self.bert_embedding = bert.embeddings
         self.encoder = bert.encoder
         e = torch.load('')
@@ -236,9 +237,24 @@ class GlyphModel(nn.Module):
         embeddings = self.bert_embedding(input_ids, token_type_ids, attention_mask)
         embeddings = embeddings + self.glyph_embedding(input_ids)
         output = self.encoder(embeddings)
-        output = output.last_hidden_state
+        # output = output.last_hidden_state
         # output:[batch, seq_len, hid]
         return output
+
+class DetectModel(nn.Module):
+    def __init__(self, DetectModelPath):
+        super(DetectModel, self).__init__()
+        self.bert = ElectraForPreTraining.from_pretrained(DetectModelPath)
+        # self.classifier = nn.Linear(self.bert.config.hidden_size, 1)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, **kwarg):
+        output = self.bert(input_ids, token_type_ids, attention_mask, labels)
+        loss = None
+        output = output.logits
+        loss = output.loss
+        # output:[batch, seq_len]
+        return loss, output
+
 
 class Model(CscTrainingModel, ABC):
     def __init__(
@@ -251,6 +267,7 @@ class Model(CscTrainingModel, ABC):
         SemanticModelPath,
         SpeechModelPath,
         GlyphModelPath,
+        DetectPath,
         if_pretrain=False,
         if_share=False
         ):
@@ -261,14 +278,43 @@ class Model(CscTrainingModel, ABC):
         self.sighan15 = sighan15
         
         if if_share:
+            g_bert = AutoModel.from_pretrained(GlyphModelPath)
+            a_bert = g_bert
+            s_bert = g_bert
             
-        self.bert = AutoModel.from_pretrained(cfg.MODEL.BERT_CKPT)
-        self.correction = nn.Linear(self.bert.config.hidden_size, 21128)
-        self.detection = nn.Linear(self.bert.config.hidden_size, 1)
+        else:
+            g_bert = AutoModel.from_pretrained(GlyphModelPath)
+            a_bert = AutoModel.from_pretrained(SpeechModelPath)
+            s_bert = AutoModel.from_pretrained(SemanticModelPath)
+            
+        self.GlyphModel = GlyphModel(g_bert)
+        self.SpeechModel = SpeechModel(a_bert)
+        self.SemanticModel = SemanticModel(s_bert)
+        
+        
+        
+        self.DetectModel = DetectModel(DetectPath)
+        
+        self.kl_loss = nn.KLDivLoss(reduction="batchmean")
+        self.logSoftMax = nn.LogSoftmax(dim=-1)
+        self.softMax = nn.Softmax(dim=-1)
+        
+        self.transformer1 = TransformerBlock(hidden=self.g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
+        self.transformer2 =  TransformerBlock(hidden=self.g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
+        self.transformer3 = TransformerBlock(hidden=self.g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
+        
         self.sigmoid = nn.Sigmoid()
-        self.tokenizer = tokenizer
-        self.loss_fct = nn.CrossEntropyLoss()
-        self.det_loss_fct = nn.BCELoss()
+        
+        self.cls = nn.Linear(self.bert.config.hidden_size, 21128)
+        
+        
+        # self.bert = AutoModel.from_pretrained(cfg.MODEL.BERT_CKPT)
+        # self.correction = nn.Linear(self.bert.config.hidden_size, 21128)
+        # self.detection = nn.Linear(self.bert.config.hidden_size, 1)
+        # self.sigmoid = nn.Sigmoid()
+        # self.tokenizer = tokenizer
+        # self.loss_fct = nn.CrossEntropyLoss()
+        # self.det_loss_fct = nn.BCELoss()
         
     def forward(self, batch):
         batch = {k:batch[k].to('cuda:0') for k in batch}
