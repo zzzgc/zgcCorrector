@@ -223,13 +223,13 @@ class SpeechModel(nn.Module):
         return output
 
 class GlyphModel(nn.Module):
-    def __init__(self, bert):
+    def __init__(self, bert, embedding_weights=''):
         super(GlyphModel, self).__init__()
         bert = bert
         
         self.bert_embedding = bert.embeddings
         self.encoder = bert.encoder
-        e = torch.load('')
+        e = torch.load('embedding_weights')
         self.glyph_embedding = nn.Embedding(21128,768).from_pretrained(e)
         
         # 这里有23个声母和24个韵母，以及5个声调
@@ -305,16 +305,15 @@ class Model(CscTrainingModel, ABC):
         self.transformer3 = TransformerBlock(hidden=self.g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
         
         self.sigmoid = nn.Sigmoid()
-        
+        self.loss_fct = nn.CrossEntropyLoss()
         self.cls = nn.Linear(self.bert.config.hidden_size, 21128)
+        self.tokenizer = tokenizer
         
         
         # self.bert = AutoModel.from_pretrained(cfg.MODEL.BERT_CKPT)
         # self.correction = nn.Linear(self.bert.config.hidden_size, 21128)
         # self.detection = nn.Linear(self.bert.config.hidden_size, 1)
         # self.sigmoid = nn.Sigmoid()
-        # self.tokenizer = tokenizer
-        # self.loss_fct = nn.CrossEntropyLoss()
         # self.det_loss_fct = nn.BCELoss()
     
     def getKL4AttentionMatrix(self, l1, l2, l3, mask, if_print_attention_matrix):
@@ -391,41 +390,89 @@ class Model(CscTrainingModel, ABC):
     
     def forward(self, batch):
         batch = {k:batch[k].to('cuda:0') for k in batch}
-        out = self.bert(
-            input_ids=batch['input_ids'],
-            token_type_ids=batch['token_type_ids'],
-            attention_mask=batch['attention_mask']
-            )
+        # out = self.bert(
+        #     input_ids=batch['input_ids'],
+        #     token_type_ids=batch['token_type_ids'],
+        #     attention_mask=batch['attention_mask']
+        #     )
         src_label = batch['labels']
         det_labels = batch['pos_labels']
         src_label[src_label == 0] = -100  # -100计算损失时会忽略
         det_labels[det_labels == 2] = 0  # -100计算损失时会忽略
         
-        # 检错概率
-        prob = self.detection(out.last_hidden_state)
-        det_loss_fct = FocalLoss(num_labels=None, activation_type='sigmoid')
-        # pad部分不计算损失
-        active_loss = batch['attention_mask'].view(-1, prob.shape[1]) == 1
-        active_probs = prob.view(-1, prob.shape[1])[active_loss]
-        active_labels = det_labels[active_loss]
-        det_loss = det_loss_fct(active_probs, active_labels.float())
+        
         # det_loss = self.det_loss_fct(self.sigmoid(prob).view(-1, prob.shape[1]).float(), det_labels.float())
 
 
-        # 纠错loss
-        out = self.correction(out.last_hidden_state)
-        correct_loss = self.loss_fct(out.view(-1, self.bert.config.vocab_size), src_label.view(-1))
         # 检错loss，纠错loss，检错输出，纠错输出
         
         
         
-        se
+        logits4Semantic = self.SemanticModel(
+            input_ids=batch['input_ids'],
+            token_type_ids=batch['token_type_ids'],
+            attention_mask=batch['attention_mask']
+            )[0]
+        logits4Speech = self.SpeechModel(
+            input_ids=batch['input_ids'],
+            token_type_ids=batch['token_type_ids'],
+            attention_mask=batch['attention_mask'],
+            initial_ids=batch['initial_ids'],
+            final_ids=batch['final_ids'],
+            tune_ids=batch['tune_ids'],
+            )[0]
+        logits4Glyph = self.GlyphModel(
+            input_ids=batch['input_ids'],
+            token_type_ids=batch['token_type_ids'],
+            attention_mask=batch['attention_mask']
+            )[0]
+        
+        # detect_out: loss, output
+        _, logits4Detect = self.DetectModel(
+            input_ids=batch['d_input_ids'],
+            token_type_ids=batch['d_token_type_ids'],
+            attention_mask=batch['d_attention_mask'],
+            labels=batch['pos_labels']
+            )
+        # 检错概率
+        det_loss_fct = FocalLoss(num_labels=None, activation_type='sigmoid')
+        # pad部分不计算损失
+        active_loss = batch['attention_mask'].view(-1, logits4Detect.shape[1]) == 1
+        active_probs = logits4Detect.view(-1, logits4Detect.shape[1])[active_loss]
+        active_labels = det_labels[active_loss]
+        det_loss = det_loss_fct(active_probs, active_labels.float())
+        
+        KLoss = self.getKL4AttentionMatrix(logits4Semantic, logits4Glyph, logits4Speech, batch['input_ids'])
+        infoNCELoss = self.getInfoNCELoss(logits4Semantic, logits4Glyph, logits4Speech, batch['input_ids'])
+        
+        
+        shape = logits4Semantic.shape
+        logits_in = torch.cat((logits4Semantic, logits4Glyph, logits4Speech), dim=1)
+        
+        logits_m, att1 = self.transformer1(logits_in, batch['input_ids'])
+        logits_m, att2 = self.transformer2(logits_m, batch['input_ids'])
+        logits_out, att3 = self.transformer3(logits_m, batch['input_ids'])
+        
+        # if if_print_attention_matrix:
+        #     torch.save(att1.to(torch.device('cpu')), 'att1')
+        #     torch.save(att2.to(torch.device('cpu')), 'att2')
+        #     torch.save(att3.to(torch.device('cpu')), 'att3')
+        
+        P = self.sigmoid(logits4Detect)
+        logits = logits_out * P + logits_in * (1 - P)
+        logits4Semantic = logits[:, :shape[1], :] + logits4Semantic
+        logits4Glyph = logits[:, shape[1]:shape[1]*2, :] + logits4Glyph
+        logits4Speech = logits[:, shape[1]*2:, :] + logits4Speech
+        logits = logits4Semantic + logits4Glyph + logits4Speech
+        
+        logits = self.cls(logits)
+        correct_loss = self.loss_fct(logits.view(-1, self.SemanticModel.config.vocab_size), src_label.view(-1))
         
         
         outputs = (det_loss,
-                    correct_loss,
-                    self.sigmoid(prob).squeeze(-1),
-                    torch.argmax(out, dim=-1))
+                    correct_loss+infoNCELoss + KLoss,
+                    P.squeeze(-1),
+                    torch.argmax(logits, dim=-1))
         batch = {k:batch[k].to('cpu') for k in batch}
         
         return outputs
