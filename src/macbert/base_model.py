@@ -13,6 +13,7 @@ import lr_scheduler
 from evaluate_util import compute_corrector_prf, compute_sentence_level_prf
 from transformers import AutoModel, AutoTokenizer, ElectraForPreTraining
 from transformer import TransformerBlock  
+import torch.nn.functional as F
 
 class FocalLoss(nn.Module):
     """
@@ -315,7 +316,79 @@ class Model(CscTrainingModel, ABC):
         # self.tokenizer = tokenizer
         # self.loss_fct = nn.CrossEntropyLoss()
         # self.det_loss_fct = nn.BCELoss()
+    
+    def getKL4AttentionMatrix(self, l1, l2, l3, mask, if_print_attention_matrix):
+        batch_size = l1.size(0)
+        hid = l1.size(-1)
         
+        if mask is not None:
+            mask = torch.matmul(mask, mask.transpose(-2, -1))
+            
+        scores12 = torch.matmul(l1, l2.transpose(-2, -1)) / math.sqrt(l1.size(-1))
+        scores13 = torch.matmul(l1, l3.transpose(-2, -1)) / math.sqrt(l1.size(-1))
+        scores23 = torch.matmul(l2, l3.transpose(-2, -1)) / math.sqrt(l1.size(-1))
+        scores21 = torch.matmul(l2, l1.transpose(-2, -1)) / math.sqrt(l1.size(-1))
+        scores31 = torch.matmul(l3, l1.transpose(-2, -1)) / math.sqrt(l1.size(-1))
+        scores32 = torch.matmul(l3, l2.transpose(-2, -1)) / math.sqrt(l1.size(-1))
+        
+        if if_print_attention_matrix:
+            torch.save(scores12.to(torch.device('cpu')), 'scores12')
+            torch.save(scores13.to(torch.device('cpu')), 'scores13')
+            torch.save(scores23.to(torch.device('cpu')), 'scores23')
+            torch.save(scores21.to(torch.device('cpu')), 'scores21')
+            torch.save(scores31.to(torch.device('cpu')), 'scores31')
+            torch.save(scores32.to(torch.device('cpu')), 'scores32')
+
+        if mask is not None:
+            scores12 = scores12.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
+            scores13 = scores13.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
+            scores23 = scores23.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
+            scores21 = scores21.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
+            scores31 = scores31.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
+            scores32 = scores32.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
+
+        input = self.logSoftMax(torch.cat((scores12, scores13, scores23, scores21, scores31, scores32), dim=0))
+        kloss = 0
+        for l in [scores12, scores13, scores23, scores21, scores31, scores32]:
+            target = self.softMax(l)
+            # target = torch.cat((l, l, l, l, l, l), dim=0)
+            kloss += self.kl_loss(input, target)
+        
+        return kloss
+
+    def getInfoNCELoss(self, l1, l2, l3, mask, if_print_attention_matrix):
+        shape = l1.shape
+        if mask is not None:
+            mask = mask.view(-1, shape[-1])
+            mask = torch.cat((mask, mask, mask), dim=0)
+            mask = torch.matmul(mask, mask.transpose(-2, -1))
+        
+        l1 = l1.view(-1, shape[-1])
+        l2 = l2.view(-1, shape[-1])
+        l3 = l3.view(-1, shape[-1])
+        
+        l123 = torch.cat((l1, l2, l3), dim=0)
+        if mask is not None:
+            l123 = l123.masked_fill(mask == 0, -1e9)
+        
+        
+        y1 = torch.arange(l123.shape[0])
+        y2 = torch.arange(l123.shape[0])
+        y1 = (y1 + l1.shape[0]) %  (3 * l1.shape[0])
+        y2 = (y2 + 2 * l1.shape[0]) %  (3 * l1.shape[0])
+        
+        
+        loss = 0
+        sim = F.cosine_similarity(l123.unsqueeze(1), l123.unsqueeze(0), dim=-1)
+        sim = sim - torch.eye(sim.shape[0]) * 1e12
+        sim = sim / 0.05
+        
+        loss1 = F.cross_entropy(sim, y1)
+        loss2 = F.cross_entropy(sim, y2)
+        loss = loss1 + loss2
+        
+        return loss
+    
     def forward(self, batch):
         batch = {k:batch[k].to('cuda:0') for k in batch}
         out = self.bert(
@@ -343,6 +416,12 @@ class Model(CscTrainingModel, ABC):
         out = self.correction(out.last_hidden_state)
         correct_loss = self.loss_fct(out.view(-1, self.bert.config.vocab_size), src_label.view(-1))
         # 检错loss，纠错loss，检错输出，纠错输出
+        
+        
+        
+        se
+        
+        
         outputs = (det_loss,
                     correct_loss,
                     self.sigmoid(prob).squeeze(-1),
