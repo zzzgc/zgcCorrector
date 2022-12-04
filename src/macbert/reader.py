@@ -7,6 +7,11 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
+
+initial_ids = 'b、p、m、f、d、t、n、l、g、k、h、j、q、x、zh、ch、sh、r、z、c、s、y、w'.split('、')
+final_ids = 'a o e i u v ai ei ui ao ou iu ie ve er an en in un vn ang eng ing ong'.split(' ')
+initial_ids = {initial_ids[i]: i+1 for i in range(initial_ids)}
+final_ids = {final_ids[i]: i+1 for i in range(final_ids)}
 class DataCollator:
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
@@ -35,12 +40,13 @@ class DataCollator:
         return ori_texts, cor_texts, det_labels
 
 class ModelDataset(Dataset):
-    def __init__(self, path, tk):
+    def __init__(self, path, tk, d_tk):
         self.tokenizer = tk
         # if path == '/var/zgcCorrector/data/data/sighan_27w.txt':
         #     p2 = "/var/zgcCorrector/data/data/13_14_15.txt"
         #     self.data = open(path, 'r').read().split('\n') + open(p2, 'r').read().strip().split('\n')+ open(p2, 'r').read().strip().split('\n')+ open(p2, 'r').read().strip().split('\n')+ open(p2, 'r').read().strip().split('\n')
         # else:
+        self.d_tk = d_tk
         self.data = open(path, 'r').read().split('\n')
         
 
@@ -57,6 +63,8 @@ class ModelDataset(Dataset):
         #####  长度trunk一下
         src = self.tokenizer(src, padding="max_length", truncation=True, max_length=128)
         trg = self.tokenizer(trg, padding="max_length", truncation=True, max_length=128)['input_ids']
+        d = self.tokenizer(trg, padding="max_length", truncation=True, max_length=128)['input_ids']
+        
         if len(pos)>126:
             pos = pos[:126]
             n = 126

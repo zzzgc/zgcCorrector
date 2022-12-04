@@ -89,5 +89,27 @@ def fun():
     # l3 = torch.nn.CrossEntropyLoss(weight=torch.as_tensor([0., 1., 1.]), reduction="none")
     print(l1(x1, y))
     print(l2(x1, y))
+from transformers import ElectraForPreTraining
+class DetectModel(nn.Module):
+    def __init__(self, DetectModelPath):
+        super(DetectModel, self).__init__()
+        self.bert = ElectraForPreTraining.from_pretrained(DetectModelPath)
+        self.type = type
+        self.classifier = nn.Linear(self.bert.config.hidden_size, 1)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, **kwarg):
+        output = self.bert(input_ids, token_type_ids, attention_mask, labels)
+        loss = None
+        output = output.logits
+        loss = output.loss
+        # output:[batch, seq_len]
+        return loss, output
+
+def electra():
     
-bertdemo()
+    from pypinyin import lazy_pinyin, Style
+    print(lazy_pinyin('四月是你的谎言,，绿色',style = Style.TONE3))
+    print(lazy_pinyin('四月是你的谎言',style = Style.INITIALS))
+    print(lazy_pinyin('四月是你的谎言',style = Style.FIRST_LETTER ))
+    print(lazy_pinyin('四月是你的谎言',style = Style.FINALS  ))
+electra()

@@ -107,7 +107,7 @@ class CorrectorEncoder(nn.Module):
         self.softMax = nn.Softmax(dim=-1)
         
         self.transformer1 = TransformerBlock(hidden=self.bert.config.hidden_size, attn_heads=8, dropout=0.3)
-        self.transformer2 = TransformerBlock(hidden=self.bert.config.hidden_size, attn_heads=8, dropout=0.3)
+        self.transformer2 =  TransformerBlock(hidden=self.bert.config.hidden_size, attn_heads=8, dropout=0.3)
         self.transformer3 = TransformerBlock(hidden=self.bert.config.hidden_size, attn_heads=8, dropout=0.3)
         
         self.sigmoid = nn.Sigmoid()
