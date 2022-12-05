@@ -6,12 +6,27 @@ from torch.utils.data import Dataset
 
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+from pypinyin import lazy_pinyin, Style
 
-
+# cls sep unk pad
 initial_ids = 'b、p、m、f、d、t、n、l、g、k、h、j、q、x、zh、ch、sh、r、z、c、s、y、w'.split('、')
 final_ids = 'a o e i u v ai ei ui ao ou iu ie ve er an en in un vn ang eng ing ong'.split(' ')
-initial_ids = {initial_ids[i]: i+1 for i in range(initial_ids)}
-final_ids = {final_ids[i]: i+1 for i in range(final_ids)}
+initial_ids_dic = {initial_ids[i]: i+5 for i in range(initial_ids)}
+final_ids_dic = {final_ids[i]: i+4 for i in range(final_ids)}
+
+
+def is_Chinese(cp):
+    if ((cp >= '\u4E00' and cp <= '\u9FFF') or  #
+            (cp >= '\u3400' and cp <= '\u4DBF') or  #
+            (cp >= '\u20000' and cp <= '\u2A6DF') or  #
+            (cp >= '\u2A700' and cp <= '\u2B73F') or  #
+            (cp >= '\u2B740' and cp <= '\u2B81F') or  #
+            (cp >= '\u2B820' and cp <= '\u2CEAF') or
+            (cp >= '\uF900' and cp <= '\uFAFF') or  #
+            (cp >= '\u2F800' and cp <= '\u2FA1F')):  #
+        return True
+    return False
+
 class DataCollator:
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
@@ -47,6 +62,8 @@ class ModelDataset(Dataset):
         #     self.data = open(path, 'r').read().split('\n') + open(p2, 'r').read().strip().split('\n')+ open(p2, 'r').read().strip().split('\n')+ open(p2, 'r').read().strip().split('\n')+ open(p2, 'r').read().strip().split('\n')
         # else:
         self.d_tk = d_tk
+        self.str2id = tk.get_vocab()
+        self.id2str = {self.str2id[k]:k for k in self.str2id}
         self.data = open(path, 'r').read().split('\n')
         
 
@@ -59,23 +76,82 @@ class ModelDataset(Dataset):
         # print(idx)
         # print(self.data[idx])
         src, trg, pos = self.data[idx].split('\t')
+        
+        pinyin = lazy_pinyin(src, style=Style.TONE3)
+        if len(pinyin) > 126:
+            pinyin = pinyin[:126]
+        initial_ids = []
+        final_ids = []
+        tune_ids = []
+       
+        
         n = len(src)
         #####  长度trunk一下
         src = self.tokenizer(src, padding="max_length", truncation=True, max_length=128)
         trg = self.tokenizer(trg, padding="max_length", truncation=True, max_length=128)['input_ids']
-        d = self.tokenizer(trg, padding="max_length", truncation=True, max_length=128)['input_ids']
+        d = self.tokenizer(src, padding="max_length", truncation=True, max_length=128)
         
-        if len(pos)>126:
-            pos = pos[:126]
-            n = 126
-        pos = [0] + [int(i) for i in pos] + [0] + [2] * (126 - len(pos))
+        pos = []
+        for i, j in zip(src['input_ids'], trg):
+            if i == j:
+                pos.append(0)
+            else:
+                pos.append(1)
+            if i == 101: # cls
+                initial_ids.append(1)
+                final_ids.append(1)
+                tune_ids.append(1)
+            elif i == 102:# sep
+                initial_ids.append(2)
+                final_ids.append(2)
+                tune_ids.append(2)
+            elif i == 0: # pad
+                initial_ids.append(0)
+                final_ids.append(0)
+                tune_ids.append(0)
+            else:
+                s = self.id2str(i)
+                if is_Chinese(s):
+                    pinyin = lazy_pinyin(s, style=Style.TONE3)[0]
+                    if pinyin[-1].isdigit():
+                        tune_ids.append(int(pinyin[-1])+3)
+                    else:
+                        tune_ids.append(8)
+                        pinyin = pinyin[:-1]
+                    if len(pinyin) == 1:
+                        initial_ids.append(4)
+                        final_ids.append(final_ids_dic[pinyin])
+                    else:
+                        if pinyin[:2] in initial_ids_dic:
+                            initial_ids.append(initial_ids_dic[pinyin[:2]])
+                            final_ids.append(final_ids_dic[pinyin[2:]])
+                        elif pinyin[:1] in initial_ids_dic:
+                            initial_ids.append(initial_ids_dic[pinyin[:1]])
+                            final_ids.append(final_ids_dic[pinyin[1:]])
+                        else:
+                            initial_ids.append(4)
+                            final_ids.append(final_ids_dic[pinyin])
+                else:
+                    initial_ids.append(3)
+                    final_ids.append(3)
+                    tune_ids.append(3)
         out = {}
         
         out['labels'] = trg
         out['pos_labels'] = pos
+        
         out['input_ids'] = src['input_ids']
         out['token_type_ids'] = src['token_type_ids']
         out['attention_mask'] = src['attention_mask']
+        
+        out['initial_ids'] = src['initial_ids']
+        out['final_ids'] = src['final_ids']
+        out['tune_ids'] = src['tune_ids']
+        
+        out['d_input_ids'] = d['input_ids']
+        out['d_token_type_ids'] = d['token_type_ids']
+        out['d_attention_mask'] = d['attention_mask']
+        
         out['len'] = n
         
         return {key: torch.tensor(value).to('cuda') for key, value in out.items()}
