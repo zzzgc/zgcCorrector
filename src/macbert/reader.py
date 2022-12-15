@@ -11,8 +11,8 @@ from pypinyin import lazy_pinyin, Style
 # cls sep unk pad
 initial_ids = 'b、p、m、f、d、t、n、l、g、k、h、j、q、x、zh、ch、sh、r、z、c、s、y、w'.split('、')
 final_ids = 'a o e i u v ai ei ui ao ou iu ie ve er an en in un vn ang eng ing ong'.split(' ')
-initial_ids_dic = {initial_ids[i]: i+5 for i in range(initial_ids)}
-final_ids_dic = {final_ids[i]: i+4 for i in range(final_ids)}
+initial_ids_dic = {initial_ids[i]: i+5 for i in range(len(initial_ids))}
+final_ids_dic = {final_ids[i]: i+4 for i in range(len(final_ids))}
 
 
 def is_Chinese(cp):

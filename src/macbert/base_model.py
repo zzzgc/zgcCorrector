@@ -9,6 +9,8 @@ import torch.nn as nn
 import numpy as np
 import pytorch_lightning as pl
 # from pycorrector.macbert import lr_scheduler
+import math
+
 import lr_scheduler
 from evaluate_util import compute_corrector_prf, compute_sentence_level_prf
 from transformers import AutoModel, AutoTokenizer, ElectraForPreTraining
@@ -229,7 +231,7 @@ class GlyphModel(nn.Module):
         
         self.bert_embedding = bert.embeddings
         self.encoder = bert.encoder
-        e = torch.load('embedding_weights')
+        e = torch.load('/var/zgcCorrector/data/font/font_embedding.emb').to('cuda')
         self.glyph_embedding = nn.Embedding(21128,768).from_pretrained(e)
         
         # 这里有23个声母和24个韵母，以及5个声调

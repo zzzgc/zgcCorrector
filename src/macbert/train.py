@@ -11,9 +11,8 @@ from loguru import logger
 sys.path.append('../..')
 
 from reader import make_loaders, DataCollator
-from macbert4csc import MacBert4Csc
 from defaults import _C as cfg
-from base_model import DemoModel
+from base_model import Model as DemoModel
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
