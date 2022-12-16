@@ -1,10 +1,15 @@
 MODEL:
   BERT_CKPT: "hfl/chinese-macbert-base"
+  DETECT_MODEL: "hfl/chinese-electra-180g-base-discriminator"
   DEVICE: "cuda"
   NAME: "macbert4csc"
   GPU_IDS: [0]
   # [loss_coefficient]
   HYPER_PARAMS: [0.4]
+  CORRECT_LOSS_WEIGHTS: [0.4]
+  NCE_LOSS_WEIGHTS: [0.4]
+  KLOSS_WEIGHTS: [0.4]
+  DETECT_LOSS_WEIGHTS: [0.4]
 
   STEP: [0.125]
   #WEIGHTS: "output/macbert4csc/epoch=6-val_loss=0.07.ckpt"
@@ -24,5 +29,5 @@ SOLVER:
   MAX_EPOCHS: 50
   ACCUMULATE_GRAD_BATCHES: 2
 
-OUTPUT_DIR: "output/pt2"
+OUTPUT_DIR: "/var/zgcCorrector/output/pt2"
 MODE: ["train", "test"]

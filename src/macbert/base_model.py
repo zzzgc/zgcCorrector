@@ -131,7 +131,7 @@ class CscTrainingModel(BaseTrainingEngine, ABC):
         # return loss
         ori_text, cor_text, det_labels = batch['input_ids'], batch['labels'], batch['pos_labels']
         outputs = self.forward(batch)
-        loss = self.w * outputs[1] + (1 - self.w) * outputs[0]
+        loss = outputs[1] + outputs[0]
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=len(ori_text))
         return loss
 
@@ -272,7 +272,7 @@ class Model(CscTrainingModel, ABC):
         GlyphModelPath,
         DetectPath,
         if_pretrain=False,
-        if_share=False
+        if_share=True
         ):
         super().__init__(cfg)
         self.cfg = cfg
@@ -302,13 +302,13 @@ class Model(CscTrainingModel, ABC):
         self.logSoftMax = nn.LogSoftmax(dim=-1)
         self.softMax = nn.Softmax(dim=-1)
         
-        self.transformer1 = TransformerBlock(hidden=self.g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
-        self.transformer2 =  TransformerBlock(hidden=self.g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
-        self.transformer3 = TransformerBlock(hidden=self.g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
+        self.transformer1 = TransformerBlock(hidden=g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
+        self.transformer2 =  TransformerBlock(hidden=g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
+        self.transformer3 = TransformerBlock(hidden=g_bert.config.hidden_size, attn_heads=8, dropout=0.3)
         
         self.sigmoid = nn.Sigmoid()
         self.loss_fct = nn.CrossEntropyLoss()
-        self.cls = nn.Linear(self.bert.config.hidden_size, 21128)
+        self.cls = nn.Linear(g_bert.config.hidden_size, 21128)
         self.tokenizer = tokenizer
         
         
@@ -471,8 +471,8 @@ class Model(CscTrainingModel, ABC):
         correct_loss = self.loss_fct(logits.view(-1, self.SemanticModel.config.vocab_size), src_label.view(-1))
         
         
-        outputs = (det_loss,
-                    correct_loss+infoNCELoss + KLoss,
+        outputs = (self.cfg.MODEL.DETECT_LOSS_WEIGHTS[0]*det_loss,
+                    self.cfg.MODEL.CORRECT_LOSS_WEIGHTS[0]*correct_loss + self.cfg.MODEL.NCE_LOSS_WEIGHTS[0]*infoNCELoss + self.cfg.MODEL.KLOSS_WEIGHTS[0]*KLoss,
                     P.squeeze(-1),
                     torch.argmax(logits, dim=-1))
         batch = {k:batch[k].to('cpu') for k in batch}

@@ -4,7 +4,7 @@ import sys
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from transformers import BertTokenizer, BertForMaskedLM
+from transformers import BertTokenizer, BertForMaskedLM, ElectraTokenizerFast
 import argparse
 from collections import OrderedDict
 from loguru import logger
@@ -14,8 +14,8 @@ from reader import make_loaders, DataCollator
 from defaults import _C as cfg
 from base_model import Model as DemoModel
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def args_parse(config_file=''):
@@ -46,18 +46,38 @@ def args_parse(config_file=''):
 
 
 def main():
-    torch.multiprocessing.set_start_method('spawn')
+    torch.multiprocessing.set_start_method('spawn', force=True)
     cfg = args_parse()
 
     # 如果不存在训练文件则先处理数据
     logger.info(f'load model, model arch: {cfg.MODEL.NAME}')
     tokenizer = BertTokenizer.from_pretrained(cfg.MODEL.BERT_CKPT)
-    # 加载数据
-    train_loader, valid13_loader, valid14_loader, valid15_loader = make_loaders(train_path=cfg.DATASETS.TRAIN,
-                                                           valid13_path=cfg.DATASETS.VALID13, valid14_path=cfg.DATASETS.VALID14, valid15_path=cfg.DATASETS.VALID15,
-                                                           batch_size=cfg.SOLVER.BATCH_SIZE, num_workers=4, tk=tokenizer)
+    
+    # discriminator = ElectraForPreTraining.from_pretrained("google/electra-base-discriminator")
+    d_tokenizer = ElectraTokenizerFast.from_pretrained(cfg.MODEL.DETECT_MODEL)
 
-    model = DemoModel(cfg, tokenizer, valid13_loader, valid14_loader, valid15_loader)
+    # 加载数据
+    train_loader, valid13_loader, valid14_loader, valid15_loader = make_loaders(
+                                                           train_path=cfg.DATASETS.TRAIN,
+                                                           valid13_path=cfg.DATASETS.VALID13, 
+                                                           valid14_path=cfg.DATASETS.VALID14, 
+                                                           valid15_path=cfg.DATASETS.VALID15,
+                                                           batch_size=cfg.SOLVER.BATCH_SIZE, 
+                                                           num_workers=4, 
+                                                           tk=tokenizer,
+                                                           d_tk=d_tokenizer)
+
+    model = DemoModel(
+        cfg,
+        tokenizer,
+        valid13_loader,
+        valid14_loader,
+        valid15_loader,
+        cfg.MODEL.BERT_CKPT,
+        cfg.MODEL.BERT_CKPT,
+        cfg.MODEL.BERT_CKPT,
+        cfg.MODEL.DETECT_MODEL
+        )
 
     # 加载之前保存的模型，继续训练
     if cfg.MODEL.WEIGHTS and os.path.exists(cfg.MODEL.WEIGHTS):

@@ -21,9 +21,14 @@ _C.MODEL.DEVICE = "cpu"
 _C.MODEL.GPU_IDS = [0]
 _C.MODEL.NUM_CLASSES = 10
 _C.MODEL.BERT_CKPT = 'bert-base-chinese'
+_C.MODEL.DETECT_MODEL = 'bert-base-chinese'
 _C.MODEL.NAME = ''
 _C.MODEL.WEIGHTS = ''
 _C.MODEL.HYPER_PARAMS = []
+_C.MODEL.CORRECT_LOSS_WEIGHTS = []
+_C.MODEL.NCE_LOSS_WEIGHTS = []
+_C.MODEL.KLOSS_WEIGHTS = []
+_C.MODEL.DETECT_LOSS_WEIGHTS = []
 _C.MODEL.STEP = []
 
 # -----------------------------------------------------------------------------

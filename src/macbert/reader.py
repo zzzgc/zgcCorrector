@@ -84,12 +84,12 @@ class ModelDataset(Dataset):
         final_ids = []
         tune_ids = []
        
-        
+        src0 = src
         n = len(src)
         #####  长度trunk一下
         src = self.tokenizer(src, padding="max_length", truncation=True, max_length=128)
         trg = self.tokenizer(trg, padding="max_length", truncation=True, max_length=128)['input_ids']
-        d = self.tokenizer(src, padding="max_length", truncation=True, max_length=128)
+        d = self.d_tk(src0, padding="max_length", truncation=True, max_length=128)
         
         pos = []
         for i, j in zip(src['input_ids'], trg):
@@ -110,24 +110,30 @@ class ModelDataset(Dataset):
                 final_ids.append(0)
                 tune_ids.append(0)
             else:
-                s = self.id2str(i)
+                s = self.id2str[i]
                 if is_Chinese(s):
                     pinyin = lazy_pinyin(s, style=Style.TONE3)[0]
                     if pinyin[-1].isdigit():
                         tune_ids.append(int(pinyin[-1])+3)
+                        pinyin = pinyin[:-1]
                     else:
                         tune_ids.append(8)
-                        pinyin = pinyin[:-1]
                     if len(pinyin) == 1:
                         initial_ids.append(4)
                         final_ids.append(final_ids_dic[pinyin])
                     else:
                         if pinyin[:2] in initial_ids_dic:
                             initial_ids.append(initial_ids_dic[pinyin[:2]])
-                            final_ids.append(final_ids_dic[pinyin[2:]])
+                            if pinyin[2:] in final_ids_dic:
+                                final_ids.append(final_ids_dic[pinyin[2:]])
+                            else:
+                                final_ids.append(final_ids_dic[pinyin[3:]])
                         elif pinyin[:1] in initial_ids_dic:
                             initial_ids.append(initial_ids_dic[pinyin[:1]])
-                            final_ids.append(final_ids_dic[pinyin[1:]])
+                            if pinyin[1:] in final_ids_dic:
+                                final_ids.append(final_ids_dic[pinyin[1:]])
+                            else:
+                                final_ids.append(final_ids_dic[pinyin[2:]])
                         else:
                             initial_ids.append(4)
                             final_ids.append(final_ids_dic[pinyin])
@@ -144,9 +150,9 @@ class ModelDataset(Dataset):
         out['token_type_ids'] = src['token_type_ids']
         out['attention_mask'] = src['attention_mask']
         
-        out['initial_ids'] = src['initial_ids']
-        out['final_ids'] = src['final_ids']
-        out['tune_ids'] = src['tune_ids']
+        out['initial_ids'] = initial_ids
+        out['final_ids'] = final_ids
+        out['tune_ids'] = tune_ids
         
         out['d_input_ids'] = d['input_ids']
         out['d_token_type_ids'] = d['token_type_ids']
@@ -168,34 +174,34 @@ class CscDataset(Dataset):
 
 
 def make_loaders(train_path='', valid13_path='', valid14_path='', valid15_path='',
-                 batch_size=32, num_workers=0, tk=None, train_13_14_15=None):
+                 batch_size=32, num_workers=1, tk=None, train_13_14_15=None, d_tk=None):
     train_loader = None
     if train_path and os.path.exists(train_path):
-        train_loader = DataLoader(ModelDataset(train_path, tk=tk),
+        train_loader = DataLoader(ModelDataset(train_path, tk=tk, d_tk=d_tk),
                                   batch_size=batch_size,
                                   shuffle=False,
                                   num_workers=num_workers,
                                   )
     valid13 = None
     if valid13_path and os.path.exists(valid13_path):
-        valid13 = DataLoader(ModelDataset(valid13_path, tk=tk),
+        valid13 = DataLoader(ModelDataset(valid13_path, tk=tk, d_tk=d_tk),
                                   batch_size=batch_size,
                                   num_workers=num_workers,
                                   )
     valid14 = None
     if valid14_path and os.path.exists(valid14_path):
-        valid14 = DataLoader(ModelDataset(valid14_path, tk=tk),
+        valid14 = DataLoader(ModelDataset(valid14_path, tk=tk, d_tk=d_tk),
                                   batch_size=batch_size,
                                   num_workers=num_workers,
                                   )
     test15 = None
     if valid15_path and os.path.exists(valid15_path):
-        test15 = DataLoader(ModelDataset(valid15_path, tk=tk),
+        test15 = DataLoader(ModelDataset(valid15_path, tk=tk, d_tk=d_tk),
                                  batch_size=batch_size,
                                  num_workers=num_workers,
                                  )
     if train_13_14_15:
-        train_13_14_15_loader = DataLoader(ModelDataset(train_13_14_15, tk=tk),
+        train_13_14_15_loader = DataLoader(ModelDataset(train_13_14_15, tk=tk, d_tk=d_tk),
                                  batch_size=batch_size,
                                  num_workers=num_workers,
                                  )
@@ -204,6 +210,6 @@ def make_loaders(train_path='', valid13_path='', valid14_path='', valid15_path='
 
 if __name__ == '__main__':
     tk = AutoTokenizer.from_pretrained('bert-base-chinese')
-    m = ModelDataset('/home/ygq/zgc/zgcCorrector-master/data/test15.txt', tk)
+    m = ModelDataset('/var/zgcCorrector/data/data/data/test14.txt', tk, tk)
     for i in range(10):
         print(m.__getitem__(i)['input_ids'].shape)
