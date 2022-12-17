@@ -14,6 +14,7 @@ final_ids = 'a o e i u v ai ei ui ao ou iu ie ve er an en in un vn ang eng ing o
 initial_ids_dic = {initial_ids[i]: i+5 for i in range(len(initial_ids))}
 final_ids_dic = {final_ids[i]: i+4 for i in range(len(final_ids))}
 
+# print(len(initial_ids_dic), len(final_ids_dic))
 
 def is_Chinese(cp):
     if ((cp >= '\u4E00' and cp <= '\u9FFF') or  #

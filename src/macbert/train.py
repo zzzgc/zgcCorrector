@@ -77,8 +77,12 @@ def main():
         cfg.MODEL.BERT_CKPT,
         cfg.MODEL.BERT_CKPT,
         cfg.MODEL.DETECT_MODEL
-        )
+        ).to('cuda')
 
+    for batch in valid13_loader:
+        out = model(batch)
+    exit()
+    
     # 加载之前保存的模型，继续训练
     if cfg.MODEL.WEIGHTS and os.path.exists(cfg.MODEL.WEIGHTS):
         model.load_from_checkpoint(checkpoint_path=cfg.MODEL.WEIGHTS, cfg=cfg, map_location=device, tokenizer=tokenizer)

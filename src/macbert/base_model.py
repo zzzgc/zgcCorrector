@@ -209,17 +209,29 @@ class SemanticModel(nn.Module):
 class SpeechModel(nn.Module):
     def __init__(self, bert):
         super(SpeechModel, self).__init__()
-        self.bert = bert
         
         # 这里有23个声母和24个韵母，以及5个声调
-        self.initialEmbeddings = nn.Embedding(23+2, self.bert.config.hidden_size)
-        self.finalEmbeddings = nn.Embedding(24+1, self.bert.config.hidden_size)
-        self.tuneEmbeddings = nn.Embedding(5+1, self.bert.config.hidden_size)
+        self.initialEmbeddings = nn.Embedding(23+5, bert.config.hidden_size).to('cuda')
+        self.finalEmbeddings = nn.Embedding(24+4, bert.config.hidden_size).to('cuda')
+        self.tuneEmbeddings = nn.Embedding(5+3, bert.config.hidden_size).to('cuda')
+        
+        # self.e_i = nn.Linear(23+2, self.bert.config.hidden_size).to('cuda')
+        # self.e_f = nn.Linear(24+1, self.bert.config.hidden_size).to('cuda')
+        # self.e_t = nn.Linear(1024, self.bert.config.hidden_size).to('cuda')
+        self.bert_embedding = bert.embeddings
+        self.encoder = bert.encoder.to('cuda')
     
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, initial_ids=None, final_ids=None, tune_ids=None,  **kwarg):
-        embeddings = self.bert.embeddings(input_ids, token_type_ids, attention_mask)
-        embeddings = embeddings + self.initialEmbeddings(initial_ids) + self.finalEmbeddings(final_ids) + self.tuneEmbeddings(tune_ids)
-        output = self.bert.encoder(embeddings)
+        # embeddings = self.bert.embeddings(input_ids, token_type_ids, attention_mask)
+        # embeddings = embeddings + self.initialEmbeddings(initial_ids) + self.finalEmbeddings(final_ids) + self.tuneEmbeddings(tune_ids)
+        # embeddings = embeddings + self.initialEmbeddings(initial_ids) 
+        # print(embeddings.shape)
+        # output = self.bert.encoder(embeddings)
+        
+        embeddings = self.bert_embedding(input_ids, token_type_ids, attention_mask)
+        # embeddings = embeddings + self.e(self.glyph_embedding(input_ids))
+        embeddings = embeddings + self.initialEmbeddings(initial_ids) 
+        output = self.encoder(embeddings)
         # output = output.last_hidden_state
         # output:[batch, seq_len, hid]
         return output
@@ -230,15 +242,17 @@ class GlyphModel(nn.Module):
         bert = bert
         
         self.bert_embedding = bert.embeddings
-        self.encoder = bert.encoder
+        self.e = nn.Linear(1024, 768).to('cuda')
+        
+        self.encoder = bert.encoder.to('cuda')
         e = torch.load('/var/zgcCorrector/data/font/font_embedding.emb').to('cuda')
-        self.glyph_embedding = nn.Embedding(21128,768).from_pretrained(e)
+        self.glyph_embedding = nn.Embedding(21128,768).from_pretrained(e).to('cuda')
         
         # 这里有23个声母和24个韵母，以及5个声调
     
     def forward(self, input_ids, token_type_ids=None, attention_mask=None,  **kwarg):
         embeddings = self.bert_embedding(input_ids, token_type_ids, attention_mask)
-        embeddings = embeddings + self.glyph_embedding(input_ids)
+        embeddings = embeddings + self.e(self.glyph_embedding(input_ids))
         output = self.encoder(embeddings)
         # output = output.last_hidden_state
         # output:[batch, seq_len, hid]
@@ -247,14 +261,13 @@ class GlyphModel(nn.Module):
 class DetectModel(nn.Module):
     def __init__(self, DetectModelPath):
         super(DetectModel, self).__init__()
+        print(DetectModelPath)
         self.bert = ElectraForPreTraining.from_pretrained(DetectModelPath)
         # self.classifier = nn.Linear(self.bert.config.hidden_size, 1)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, **kwarg):
-        output = self.bert(input_ids, token_type_ids, attention_mask, labels)
-        loss = None
-        output = output.logits
-        loss = output.loss
+        output = self.bert(input_ids, attention_mask, token_type_ids, labels=labels)
+        output, loss = output.logits, output.loss
         # output:[batch, seq_len]
         return loss, output
 
@@ -318,12 +331,13 @@ class Model(CscTrainingModel, ABC):
         # self.sigmoid = nn.Sigmoid()
         # self.det_loss_fct = nn.BCELoss()
     
-    def getKL4AttentionMatrix(self, l1, l2, l3, mask, if_print_attention_matrix):
+    def getKL4AttentionMatrix(self, l1, l2, l3, mask, if_print_attention_matrix=False):
         batch_size = l1.size(0)
         hid = l1.size(-1)
         
         if mask is not None:
-            mask = torch.matmul(mask, mask.transpose(-2, -1))
+            # mask = torch.matmul(mask, mask.transpose(-2, -1))
+            mask = mask * mask.transpose(-2, -1)
             
         scores12 = torch.matmul(l1, l2.transpose(-2, -1)) / math.sqrt(l1.size(-1))
         scores13 = torch.matmul(l1, l3.transpose(-2, -1)) / math.sqrt(l1.size(-1))
@@ -357,7 +371,7 @@ class Model(CscTrainingModel, ABC):
         
         return kloss
 
-    def getInfoNCELoss(self, l1, l2, l3, mask, if_print_attention_matrix):
+    def getInfoNCELoss(self, l1, l2, l3, mask):
         shape = l1.shape
         if mask is not None:
             mask = mask.view(-1, shape[-1])
@@ -475,7 +489,7 @@ class Model(CscTrainingModel, ABC):
                     self.cfg.MODEL.CORRECT_LOSS_WEIGHTS[0]*correct_loss + self.cfg.MODEL.NCE_LOSS_WEIGHTS[0]*infoNCELoss + self.cfg.MODEL.KLOSS_WEIGHTS[0]*KLoss,
                     P.squeeze(-1),
                     torch.argmax(logits, dim=-1))
-        batch = {k:batch[k].to('cpu') for k in batch}
+        # batch = {k:batch[k].to('cpu') for k in batch}
         
         return outputs
     
