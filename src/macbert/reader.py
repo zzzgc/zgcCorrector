@@ -13,10 +13,12 @@ initial_ids = 'b、p、m、f、d、t、n、l、g、k、h、j、q、x、zh、ch�
 final_ids = 'a o e i u v ai ei ui ao ou iu ie ve er an en in un vn ang eng ing ong'.split(' ')
 initial_ids_dic = {initial_ids[i]: i+5 for i in range(len(initial_ids))}
 final_ids_dic = {final_ids[i]: i+4 for i in range(len(final_ids))}
-
+final_ids_dic['○'] = final_ids_dic['o']
 # print(len(initial_ids_dic), len(final_ids_dic))
 
 def is_Chinese(cp):
+    if cp == '──':
+        return False
     if ((cp >= '\u4E00' and cp <= '\u9FFF') or  #
             (cp >= '\u3400' and cp <= '\u4DBF') or  #
             (cp >= '\u20000' and cp <= '\u2A6DF') or  #
@@ -134,9 +136,16 @@ class ModelDataset(Dataset):
                             if pinyin[1:] in final_ids_dic:
                                 final_ids.append(final_ids_dic[pinyin[1:]])
                             else:
+                                if pinyin[2:] not in final_ids_dic:
+                                    print('****')
+                                    print(pinyin[2:])
+                                    print(pinyin)
                                 final_ids.append(final_ids_dic[pinyin[2:]])
                         else:
                             initial_ids.append(4)
+                            if pinyin not in final_ids_dic or pinyin == '──':
+                                print('****')
+                                print(s)
                             final_ids.append(final_ids_dic[pinyin])
                 else:
                     initial_ids.append(3)
@@ -210,7 +219,8 @@ def make_loaders(train_path='', valid13_path='', valid14_path='', valid15_path='
     return train_loader, valid13, valid14, test15
 
 if __name__ == '__main__':
-    tk = AutoTokenizer.from_pretrained('bert-base-chinese')
-    m = ModelDataset('/var/zgcCorrector/data/data/data/test14.txt', tk, tk)
-    for i in range(10):
-        print(m.__getitem__(i)['input_ids'].shape)
+    # tk = AutoTokenizer.from_pretrained('bert-base-chinese')
+    # m = ModelDataset('/var/zgcCorrector/data/data/data/test14.txt', tk, tk)
+    # for i in range(10):
+    #     print(m.__getitem__(i)['input_ids'].shape)
+    print(is_Chinese('──'))

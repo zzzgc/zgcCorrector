@@ -7,10 +7,15 @@ import math
 
 class Attention(nn.Module):
     def forward(self, query, key, value, mask=None, dropout=None):
+        shape = query.shape
+        
         scores = torch.matmul(query, key.transpose(-2, -1)) \
                  / math.sqrt(query.size(-1))
-
         if mask is not None:
+            mask = torch.cat((mask, mask, mask), dim=1)
+            mask = mask.view(shape[0], 1, shape[2], 1)
+            mask = mask * mask.transpose(-2, -1)
+            mask = mask.repeat(1, shape[1], 1, 1)
             scores = scores.masked_fill(mask == 0, -1e9)
 
         p_attn = F.softmax(scores, dim=-1)

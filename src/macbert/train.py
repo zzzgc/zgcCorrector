@@ -9,14 +9,14 @@ import argparse
 from collections import OrderedDict
 from loguru import logger
 sys.path.append('../..')
-
+from tqdm import tqdm
 from reader import make_loaders, DataCollator
 from defaults import _C as cfg
 from base_model import Model as DemoModel
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def args_parse(config_file=''):
     parser = argparse.ArgumentParser(description="csc")
@@ -46,7 +46,7 @@ def args_parse(config_file=''):
 
 
 def main():
-    torch.multiprocessing.set_start_method('spawn', force=True)
+    # torch.multiprocessing.set_start_method('spawn', force=True)
     cfg = args_parse()
 
     # 如果不存在训练文件则先处理数据
@@ -63,7 +63,7 @@ def main():
                                                            valid14_path=cfg.DATASETS.VALID14, 
                                                            valid15_path=cfg.DATASETS.VALID15,
                                                            batch_size=cfg.SOLVER.BATCH_SIZE, 
-                                                           num_workers=4, 
+                                                           num_workers=0, 
                                                            tk=tokenizer,
                                                            d_tk=d_tokenizer)
 
@@ -78,11 +78,12 @@ def main():
         cfg.MODEL.BERT_CKPT,
         cfg.MODEL.DETECT_MODEL
         ).to('cuda')
-
-    for batch in valid13_loader:
-        out = model(batch)
-    exit()
     
+    print('*'*50)
+    # for batch in tqdm(valid13_loader):
+    #     out = model(batch)
+    #     continue
+    # exit()
     # 加载之前保存的模型，继续训练
     if cfg.MODEL.WEIGHTS and os.path.exists(cfg.MODEL.WEIGHTS):
         model.load_from_checkpoint(checkpoint_path=cfg.MODEL.WEIGHTS, cfg=cfg, map_location=device, tokenizer=tokenizer)
@@ -101,6 +102,7 @@ def main():
                          gpus=None if device == torch.device('cpu') else cfg.MODEL.GPU_IDS,
                          accumulate_grad_batches=cfg.SOLVER.ACCUMULATE_GRAD_BATCHES,
                          val_check_interval=cfg.MODEL.STEP[0],
+                         accelerator='ddp',
                          callbacks=[ckpt_callback])
     # 进行训练
     # train_loader中有数据

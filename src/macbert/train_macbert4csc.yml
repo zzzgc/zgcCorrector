@@ -3,7 +3,7 @@ MODEL:
   DETECT_MODEL: "hfl/chinese-electra-180g-base-discriminator"
   DEVICE: "cuda"
   NAME: "macbert4csc"
-  GPU_IDS: [0]
+  GPU_IDS: [0,1,2,3]
   # [loss_coefficient]
   HYPER_PARAMS: [0.4]
   CORRECT_LOSS_WEIGHTS: [0.4]
@@ -25,7 +25,7 @@ DATASETS:
 SOLVER:
   BASE_LR: 5e-5
   WEIGHT_DECAY: 0.01
-  BATCH_SIZE: 2
+  BATCH_SIZE: 4
   MAX_EPOCHS: 50
   ACCUMULATE_GRAD_BATCHES: 2
 

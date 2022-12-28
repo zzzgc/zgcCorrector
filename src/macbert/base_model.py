@@ -369,6 +369,7 @@ class Model(CscTrainingModel, ABC):
         for l in [scores12, scores13, scores23, scores21, scores31, scores32]:
             target = self.softMax(l)
             # target = torch.cat((l, l, l, l, l, l), dim=0)
+            target = target.repeat(6, 1)
             kloss += self.kl_loss(input, target)
         return kloss
 
@@ -386,27 +387,22 @@ class Model(CscTrainingModel, ABC):
         l123 = torch.cat((l1, l2, l3), dim=0)
         # if mask is not None:
         #     l123 = l123.masked_fill(mask == 0, -1e9)
-        print(l1.shape, l123.shape)
         
-        y1 = torch.arange(l123.shape[0])
-        y2 = torch.arange(l123.shape[0])
+        y1 = torch.arange(l123.shape[0]).to('cuda')
+        y2 = torch.arange(l123.shape[0]).to('cuda')
         y1 = (y1 + l1.shape[0]) %  (3 * l1.shape[0])
         y2 = (y2 + 2 * l1.shape[0]) %  (3 * l1.shape[0])
-        print(y1)
-        print(y2)        
         loss = 0
         sim = F.cosine_similarity(l123.unsqueeze(1), l123.unsqueeze(0), dim=-1)
         sim = sim - torch.eye(sim.shape[0]).to('cuda') * 1e12
         sim = sim / 0.05
-        
         loss1 = F.cross_entropy(sim, y1)
         loss2 = F.cross_entropy(sim, y2)
         loss = loss1 + loss2
-        
         return loss
     
     def forward(self, batch):
-        batch = {k:batch[k].to('cuda:0') for k in batch}
+        batch = {k:batch[k].to('cuda') for k in batch}
         # out = self.bert(
         #     input_ids=batch['input_ids'],
         #     token_type_ids=batch['token_type_ids'],
@@ -465,7 +461,6 @@ class Model(CscTrainingModel, ABC):
         
         shape = logits4Semantic.shape
         logits_in = torch.cat((logits4Semantic, logits4Glyph, logits4Speech), dim=1)
-        
         logits_m, att1 = self.transformer1(logits_in, batch['input_ids'])
         logits_m, att2 = self.transformer2(logits_m, batch['input_ids'])
         logits_out, att3 = self.transformer3(logits_m, batch['input_ids'])
@@ -474,8 +469,10 @@ class Model(CscTrainingModel, ABC):
         #     torch.save(att1.to(torch.device('cpu')), 'att1')
         #     torch.save(att2.to(torch.device('cpu')), 'att2')
         #     torch.save(att3.to(torch.device('cpu')), 'att3')
-        
         P = self.sigmoid(logits4Detect)
+        Prob = P
+        # print(P.shape, logits_out.shape, shape)
+        P = P.view(shape[0], shape[1], 1).repeat(1, 3, shape[2])
         logits = logits_out * P + logits_in * (1 - P)
         logits4Semantic = logits[:, :shape[1], :] + logits4Semantic
         logits4Glyph = logits[:, shape[1]:shape[1]*2, :] + logits4Glyph
@@ -483,15 +480,19 @@ class Model(CscTrainingModel, ABC):
         logits = logits4Semantic + logits4Glyph + logits4Speech
         
         logits = self.cls(logits)
-        correct_loss = self.loss_fct(logits.view(-1, self.SemanticModel.config.vocab_size), src_label.view(-1))
+        # print(logits.view(-1, 21128).shape, src_label.view(-1).shape)
+        correct_loss = self.loss_fct(logits.view(-1, 21128), src_label.view(-1))
         
-        
+        # print('*'*50)
+        # print(det_loss)
+        # print(KLoss)
+        # print(infoNCELoss)
+        # print(correct_loss)
         outputs = (self.cfg.MODEL.DETECT_LOSS_WEIGHTS[0]*det_loss,
                     self.cfg.MODEL.CORRECT_LOSS_WEIGHTS[0]*correct_loss + self.cfg.MODEL.NCE_LOSS_WEIGHTS[0]*infoNCELoss + self.cfg.MODEL.KLOSS_WEIGHTS[0]*KLoss,
-                    P.squeeze(-1),
+                    Prob.squeeze(-1),
                     torch.argmax(logits, dim=-1))
         # batch = {k:batch[k].to('cpu') for k in batch}
-        
         return outputs
     
     # def train_dataloader(self):

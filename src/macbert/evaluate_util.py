@@ -96,7 +96,6 @@ def compute_sentence_level_prf(results, logger, pro=0.5):
     FN = 0.0
     TN = 0.0
     total_num = len(results)
-
     for item in results:
         _, _, _, pre, tgt = item
 
