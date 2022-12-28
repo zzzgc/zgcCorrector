@@ -333,10 +333,11 @@ class Model(CscTrainingModel, ABC):
     
     def getKL4AttentionMatrix(self, l1, l2, l3, mask, if_print_attention_matrix=False):
         batch_size = l1.size(0)
+        shape = l1.shape
         hid = l1.size(-1)
-        
         if mask is not None:
             # mask = torch.matmul(mask, mask.transpose(-2, -1))
+            mask = mask.view(shape[0], shape[1], -1)
             mask = mask * mask.transpose(-2, -1)
             
         scores12 = torch.matmul(l1, l2.transpose(-2, -1)) / math.sqrt(l1.size(-1))
@@ -355,12 +356,13 @@ class Model(CscTrainingModel, ABC):
             torch.save(scores32.to(torch.device('cpu')), 'scores32')
 
         if mask is not None:
-            scores12 = scores12.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
-            scores13 = scores13.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
-            scores23 = scores23.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
-            scores21 = scores21.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
-            scores31 = scores31.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
-            scores32 = scores32.masked_fill(mask == 0, -1e9).view(batch_size, hid * hid)
+            scores12 = scores12.masked_fill(mask == 0, -1e9)
+            scores12 = scores12.view(-1, batch_size*shape[1]*shape[1])
+            scores13 = scores13.masked_fill(mask == 0, -1e9).view(-1, batch_size*shape[1]*shape[1])
+            scores23 = scores23.masked_fill(mask == 0, -1e9).view(-1, batch_size*shape[1]*shape[1])
+            scores21 = scores21.masked_fill(mask == 0, -1e9).view(-1, batch_size*shape[1]*shape[1])
+            scores31 = scores31.masked_fill(mask == 0, -1e9).view(-1, batch_size*shape[1]*shape[1])
+            scores32 = scores32.masked_fill(mask == 0, -1e9).view(-1, batch_size*shape[1]*shape[1])
 
         input = self.logSoftMax(torch.cat((scores12, scores13, scores23, scores21, scores31, scores32), dim=0))
         kloss = 0
@@ -368,34 +370,33 @@ class Model(CscTrainingModel, ABC):
             target = self.softMax(l)
             # target = torch.cat((l, l, l, l, l, l), dim=0)
             kloss += self.kl_loss(input, target)
-        
         return kloss
 
     def getInfoNCELoss(self, l1, l2, l3, mask):
         shape = l1.shape
-        if mask is not None:
-            mask = mask.view(-1, shape[-1])
-            mask = torch.cat((mask, mask, mask), dim=0)
-            mask = torch.matmul(mask, mask.transpose(-2, -1))
+        # if mask is not None: 
+        #     mask = mask.view(shape[0], -1)
+        #     mask = torch.cat((mask, mask, mask), dim=0)
+        #     mask = torch.matmul(mask, mask.transpose(-2, -1))
         
         l1 = l1.view(-1, shape[-1])
         l2 = l2.view(-1, shape[-1])
         l3 = l3.view(-1, shape[-1])
         
         l123 = torch.cat((l1, l2, l3), dim=0)
-        if mask is not None:
-            l123 = l123.masked_fill(mask == 0, -1e9)
-        
+        # if mask is not None:
+        #     l123 = l123.masked_fill(mask == 0, -1e9)
+        print(l1.shape, l123.shape)
         
         y1 = torch.arange(l123.shape[0])
         y2 = torch.arange(l123.shape[0])
         y1 = (y1 + l1.shape[0]) %  (3 * l1.shape[0])
         y2 = (y2 + 2 * l1.shape[0]) %  (3 * l1.shape[0])
-        
-        
+        print(y1)
+        print(y2)        
         loss = 0
         sim = F.cosine_similarity(l123.unsqueeze(1), l123.unsqueeze(0), dim=-1)
-        sim = sim - torch.eye(sim.shape[0]) * 1e12
+        sim = sim - torch.eye(sim.shape[0]).to('cuda') * 1e12
         sim = sim / 0.05
         
         loss1 = F.cross_entropy(sim, y1)
