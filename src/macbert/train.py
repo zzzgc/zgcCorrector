@@ -80,6 +80,11 @@ def main():
         ).to('cuda')
     
     print('*'*50)
+    # s = [train_loader, valid13_loader, valid14_loader, valid15_loader]
+    # for i in s:
+    #     for b in tqdm(i):
+    #         continue
+    # exit()
     # for batch in tqdm(valid13_loader):
     #     out = model(batch)
     #     continue

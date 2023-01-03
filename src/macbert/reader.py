@@ -81,8 +81,8 @@ class ModelDataset(Dataset):
         src, trg, pos = self.data[idx].split('\t')
         
         pinyin = lazy_pinyin(src, style=Style.TONE3)
-        if len(pinyin) > 126:
-            pinyin = pinyin[:126]
+        if len(pinyin) > 78:
+            pinyin = pinyin[:78]
         initial_ids = []
         final_ids = []
         tune_ids = []
@@ -90,9 +90,9 @@ class ModelDataset(Dataset):
         src0 = src
         n = len(src)
         #####  长度trunk一下
-        src = self.tokenizer(src, padding="max_length", truncation=True, max_length=128)
-        trg = self.tokenizer(trg, padding="max_length", truncation=True, max_length=128)['input_ids']
-        d = self.d_tk(src0, padding="max_length", truncation=True, max_length=128)
+        src = self.tokenizer(src, padding="max_length", truncation=True, max_length=80)
+        trg = self.tokenizer(trg, padding="max_length", truncation=True, max_length=80)['input_ids']
+        d = self.d_tk(src0, padding="max_length", truncation=True, max_length=80)
         
         pos = []
         for i, j in zip(src['input_ids'], trg):
@@ -114,6 +114,8 @@ class ModelDataset(Dataset):
                 tune_ids.append(0)
             else:
                 s = self.id2str[i]
+                if s == '嗯':
+                    s = '恩'
                 if is_Chinese(s):
                     pinyin = lazy_pinyin(s, style=Style.TONE3)[0]
                     if pinyin[-1].isdigit():
@@ -123,6 +125,9 @@ class ModelDataset(Dataset):
                         tune_ids.append(8)
                     if len(pinyin) == 1:
                         initial_ids.append(4)
+                        if pinyin not in final_ids_dic:
+                            print('//'*50)
+                            print(s, pinyin)
                         final_ids.append(final_ids_dic[pinyin])
                     else:
                         if pinyin[:2] in initial_ids_dic:
@@ -224,3 +229,5 @@ if __name__ == '__main__':
     # for i in range(10):
     #     print(m.__getitem__(i)['input_ids'].shape)
     print(is_Chinese('──'))
+    pinyin = lazy_pinyin('嗯，恩人', style=Style.TONE3)
+    print(pinyin)
