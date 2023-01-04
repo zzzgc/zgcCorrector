@@ -531,7 +531,7 @@ class Model(CscTrainingModel, ABC):
             src, trg, d_labels = batch['input_ids'].tolist(), batch['labels'].tolist(), batch['pos_labels'].tolist()
             batch_idx = batch['idx']
             l = batch['len'].tolist()
-            for p_c, p_d, s, t, d_l, ll in zip(pre_c, pre_d, src, trg, d_labels, l, batch_idx):
+            for p_c, p_d, s, t, d_l, ll, it_idx in zip(pre_c, pre_d, src, trg, d_labels, l, batch_idx):
                 p_d = p_d[1:ll+1]
                 s = s[1:ll+1]
                 t = t[1:ll+1]
@@ -550,7 +550,7 @@ class Model(CscTrainingModel, ABC):
             src, trg, d_labels = batch['input_ids'].tolist(), batch['labels'].tolist(), batch['pos_labels'].tolist()
             batch_idx = batch['idx']
             l = batch['len'].tolist()
-            for p_c, p_d, s, t, d_l, ll in zip(pre_c, pre_d, src, trg, d_labels, l, batch_idx):
+            for p_c, p_d, s, t, d_l, ll, it_idx in zip(pre_c, pre_d, src, trg, d_labels, l, batch_idx):
                 p_d = p_d[1:ll+1]
                 s = s[1:ll+1]
                 t = t[1:ll+1]
