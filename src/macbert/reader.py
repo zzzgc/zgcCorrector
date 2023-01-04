@@ -172,7 +172,7 @@ class ModelDataset(Dataset):
         out['d_input_ids'] = d['input_ids']
         out['d_token_type_ids'] = d['token_type_ids']
         out['d_attention_mask'] = d['attention_mask']
-        
+        out['idx'] = idx
         out['len'] = n
         
         return {key: torch.tensor(value).to('cuda') for key, value in out.items()}

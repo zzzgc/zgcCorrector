@@ -10,7 +10,7 @@ def compute_corrector_prf(results, logger):
     all_predict_true_index = []
     all_gold_index = []
     for item in results:
-        src, predict, tgt, _, _ = item
+        src, predict, tgt, _, _, _ = item
         gold_index = []
         each_true_index = []
         for i in range(len(list(src))):
@@ -97,7 +97,7 @@ def compute_sentence_level_prf(results, logger, pro=0.5):
     TN = 0.0
     total_num = len(results)
     for item in results:
-        _, _, _, pre, tgt = item
+        _, _, _, pre, tgt, it_idx = item
 
         # 负样本
         pp = []
@@ -136,26 +136,30 @@ def compute_sentence_level_prf(results, logger, pro=0.5):
     FN = 0.0
     TN = 0.0
     total_num = len(results)
-
+    tns, fns, tps, fps = [], [], [], []
     for item in results:
-        src, predict, tgt, _, _ = item
+        src, predict, tgt, _, _, it_idx = item
 
         # 负样本
         if src == tgt:
             # 预测也为负
             if tgt == predict:
                 TN += 1
+                tns.append(str(it_idx))
             # 预测为正
             else:
                 FP += 1
+                fps.append(str(it_idx))
         # 正样本
         else:
             # 预测也为正
             if tgt == predict:
                 TP += 1
+                tps.append(str(it_idx))
             # 预测为负
             else:
                 FN += 1
+                fns.append(str(it_idx))
 
     acc = (TP + TN) / total_num
     precision = TP / (TP + FP) if TP > 0 else 0.0
@@ -163,6 +167,14 @@ def compute_sentence_level_prf(results, logger, pro=0.5):
     f1 = 2 * precision * recall / (precision + recall) if precision + recall != 0 else 0
 
     logger.info(f'Correction Sentence Level: acc:{acc:.6f}, precision:{precision:.6f}, recall:{recall:.6f}, f1:{f1:.6f}')
+    tps = ' '.join(tps)
+    fps = ' '.join(fps)
+    tns = ' '.join(tns)
+    fns = ' '.join(fns)
+    logger.info('>>>tps:'+tps)
+    logger.info('>>>fps:'+fps)
+    logger.info('>>>tns:'+tns)
+    logger.info('>>>fns:'+fns)
     return acc, precision, recall, f1
 
 
